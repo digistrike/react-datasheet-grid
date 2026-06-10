@@ -131,6 +131,10 @@ export const useColumns = <T extends any>(
         grow: column.grow ?? legacyWidth.grow ?? 1,
         shrink: column.shrink ?? legacyWidth.shrink ?? 1,
         minWidth: column.minWidth ?? 100,
+        columnData:
+          column.columnData !== undefined && column.wordWrap !== undefined
+            ? { ...column.columnData, wordWrap: column.wordWrap }
+            : column.columnData,
         component: column.component ?? defaultComponent,
         disableKeys: column.disableKeys ?? false,
         disabled: column.disabled ?? false,

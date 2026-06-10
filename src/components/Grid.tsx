@@ -18,6 +18,10 @@ import cx from 'classnames'
 import { Cell as CellComponent } from './Cell'
 import { useMemoizedIndexCallback } from '../hooks/useMemoizedIndexCallback'
 import { measureRowContentHeight } from '../utils/measureRowContentHeight'
+import {
+  getColumnResizable,
+  getColumnWordWrap,
+} from '../utils/columnFeatures'
 
 export const Grid = <T extends any>({
   data,
@@ -46,7 +50,9 @@ export const Grid = <T extends any>({
   stopEditing,
   onScroll,
   wordWrap = false,
+  hasWordWrap = false,
   resizableColumns = false,
+  hasResizableColumns = false,
   resizableRows = false,
   onColumnResizeStart,
   onRowResizeStart,
@@ -78,7 +84,9 @@ export const Grid = <T extends any>({
   stopEditing: (opts?: { nextRow?: boolean }) => void
   onScroll?: React.UIEventHandler<HTMLDivElement>
   wordWrap?: boolean
+  hasWordWrap?: boolean
   resizableColumns?: boolean
+  hasResizableColumns?: boolean
   resizableRows?: boolean
   onColumnResizeStart?: (
     columnIndex: number,
@@ -146,7 +154,7 @@ export const Grid = <T extends any>({
 
   useEffect(() => {
     rowVirtualizer.measure()
-  }, [rowVirtualizer, wordWrap, columnWidths, data.length, rowHeight])
+  }, [rowVirtualizer, hasWordWrap, columnWidths, data.length, rowHeight])
 
   const onRowHeightsChangeRef = useRef(onRowHeightsChange)
   onRowHeightsChangeRef.current = onRowHeightsChange
@@ -159,7 +167,7 @@ export const Grid = <T extends any>({
   activeCellRef.current = activeCell
 
   const measureVisibleRows = useCallback(() => {
-    if (!wordWrap || !onRowHeightsChangeRef.current || !innerRef.current) {
+    if (!hasWordWrap || !onRowHeightsChangeRef.current || !innerRef.current) {
       return
     }
 
@@ -187,7 +195,7 @@ export const Grid = <T extends any>({
     if (Object.keys(heights).length > 0) {
       onRowHeightsChangeRef.current(heights)
     }
-  }, [wordWrap, baseRowHeight, innerRef])
+  }, [hasWordWrap, baseRowHeight, innerRef])
 
   useLayoutEffect(() => {
     if (editing) {
@@ -195,7 +203,14 @@ export const Grid = <T extends any>({
     }
 
     measureVisibleRows()
-  }, [wordWrap, columnWidthsKey, data, baseRowHeight, editing, measureVisibleRows])
+  }, [
+    hasWordWrap,
+    columnWidthsKey,
+    data,
+    baseRowHeight,
+    editing,
+    measureVisibleRows,
+  ])
 
   useLayoutEffect(() => {
     if (prevEditingRef.current && !editing) {
@@ -265,12 +280,13 @@ export const Grid = <T extends any>({
                 </div>
               </CellComponent>
             ))}
-            {resizableColumns && (
+            {hasResizableColumns && (
               <div className="dsg-column-resize-layer">
                 {colVirtualizer.getVirtualItems().map((col) => {
                   if (
                     col.index === 0 ||
-                    col.index >= lastStickyColumnIndex
+                    col.index >= lastStickyColumnIndex ||
+                    !getColumnResizable(columns[col.index], resizableColumns)
                   ) {
                     return null
                   }
@@ -307,7 +323,7 @@ export const Grid = <T extends any>({
               data-index={row.index}
               className={cx(
                 'dsg-row',
-                wordWrap && 'dsg-row-wrap',
+                hasWordWrap && 'dsg-row-wrap',
                 typeof rowClassName === 'string' ? rowClassName : null,
                 typeof rowClassName === 'function'
                   ? rowClassName({
@@ -346,7 +362,7 @@ export const Grid = <T extends any>({
                     }
                     active={col.index === 0 && rowActive}
                     disabled={cellDisabled}
-                    wordWrap={wordWrap}
+                    wordWrap={getColumnWordWrap(columns[col.index], wordWrap)}
                     className={cx(
                       typeof colCellClassName === 'function'
                         ? colCellClassName({

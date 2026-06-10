@@ -43,6 +43,10 @@ import { getAllTabbableElements } from '../utils/tab'
 import { Grid } from './Grid'
 import { SelectionRect } from './SelectionRect'
 import { useRowHeights } from '../hooks/useRowHeights'
+import {
+  hasAnyResizableColumns,
+  hasAnyWordWrap,
+} from '../utils/columnFeatures'
 
 const DEFAULT_DATA: any[] = []
 const DEFAULT_COLUMNS: Column<any, any, any>[] = []
@@ -102,6 +106,14 @@ export const DataSheetGrid = React.memo(
       const lastEditingCellRef = useRef<Cell | null>(null)
       const disableContextMenu = disableContextMenuRaw || lockRows
       const columns = useColumns(rawColumns, gutterColumn, stickyRightColumn)
+      const hasWordWrap = useMemo(
+        () => hasAnyWordWrap(columns, wordWrap),
+        [wordWrap, columns]
+      )
+      const hasResizableColumns = useMemo(
+        () => hasAnyResizableColumns(columns, resizableColumns),
+        [resizableColumns, columns]
+      )
       const hasStickyRightColumn = Boolean(stickyRightColumn)
       const innerRef = useRef<HTMLDivElement>(null)
       const outerRef = useRef<HTMLDivElement>(null)
@@ -132,17 +144,17 @@ export const DataSheetGrid = React.memo(
       const { getRowSize, totalSize, getRowIndex, resetAfter } = useRowHeights({
         value: data,
         rowHeight:
-          wordWrap || resizableRows ? dynamicRowHeight : rowHeight,
+          hasWordWrap || resizableRows ? dynamicRowHeight : rowHeight,
       })
 
       const dataLengthRef = useRef(data.length)
 
       useEffect(() => {
-        if (wordWrap && dataLengthRef.current !== data.length) {
+        if (hasWordWrap && dataLengthRef.current !== data.length) {
           setMeasuredRowHeights({})
           dataLengthRef.current = data.length
         }
-      }, [data.length, wordWrap])
+      }, [data.length, hasWordWrap])
 
       useEffect(() => {
         if (resizableRows) {
@@ -196,7 +208,7 @@ export const DataSheetGrid = React.memo(
       )
 
       // Height of the list (including scrollbars and borders) to display
-      const displayHeight = wordWrap || resizableRows
+      const displayHeight = hasWordWrap || resizableRows
         ? maxHeight
         : Math.min(
             maxHeight,
@@ -220,7 +232,7 @@ export const DataSheetGrid = React.memo(
         columnWidths,
         columnRights,
         setColumnWidth,
-      } = useResizableColumnWidths(columns, width, resizableColumns)
+      } = useResizableColumnWidths(columns, width, hasResizableColumns)
 
       const resizingColumnRef = useRef<{
         index: number
@@ -1990,11 +2002,13 @@ export const DataSheetGrid = React.memo(
               cellClassName={cellClassName}
               onScroll={onScroll}
               wordWrap={wordWrap}
+              hasWordWrap={hasWordWrap}
               resizableColumns={resizableColumns}
+              hasResizableColumns={hasResizableColumns}
               resizableRows={resizableRows}
               onColumnResizeStart={onColumnResizeStart}
               onRowResizeStart={onRowResizeStart}
-              onRowHeightsChange={wordWrap ? onRowHeightsChange : undefined}
+              onRowHeightsChange={hasWordWrap ? onRowHeightsChange : undefined}
             >
             <SelectionRect
               columnRights={columnRights}

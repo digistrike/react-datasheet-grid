@@ -36,6 +36,16 @@ export type Column<T, C, PasteValue> = {
   shrink: number
   minWidth: number
   maxWidth?: number
+  /**
+   * Per-column word wrap override.
+   * `true` = always wrap, `false` = never wrap, `undefined` = use grid `wordWrap`.
+   */
+  wordWrap?: boolean
+  /**
+   * Per-column resize override.
+   * `true` = always resizable, `false` = never resizable, `undefined` = use grid `resizableColumns`.
+   */
+  resizable?: boolean
   component: CellComponent<T, C>
   columnData?: C
   disableKeys: boolean
@@ -82,6 +92,8 @@ export type SimpleColumn<T, C> = Partial<
     | 'basis'
     | 'grow'
     | 'shrink'
+    | 'wordWrap'
+    | 'resizable'
     | 'component'
     | 'columnData'
   >

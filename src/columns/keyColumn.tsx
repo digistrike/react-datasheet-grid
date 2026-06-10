@@ -1,10 +1,14 @@
 import React, { useCallback, useRef } from 'react'
 import { CellComponent, Column } from '../types'
 
-type ColumnData = { key: string; original: Partial<Column<any, any, any>> }
+type ColumnData = {
+  key: string
+  original: Partial<Column<any, any, any>>
+  wordWrap?: boolean
+}
 
 const KeyComponent: CellComponent<any, ColumnData> = ({
-  columnData: { key, original },
+  columnData: { key, original, wordWrap: columnWordWrap },
   rowData,
   setRowData,
   ...rest
@@ -27,9 +31,15 @@ const KeyComponent: CellComponent<any, ColumnData> = ({
 
   const Component = original.component
 
+  const innerColumnData = {
+    ...original.columnData,
+    ...(original.wordWrap !== undefined ? { wordWrap: original.wordWrap } : {}),
+    ...(columnWordWrap !== undefined ? { wordWrap: columnWordWrap } : {}),
+  }
+
   return (
     <Component
-      columnData={original.columnData}
+      columnData={innerColumnData}
       setRowData={setKeyData}
       // We only pass the value of the desired key, this is why each cell does not have to re-render everytime
       // another cell in the same row changes!
