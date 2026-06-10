@@ -1,0 +1,1 @@
+{"version":3,"file":"GridContext.js","sourceRoot":"","sources":["../../src/context/GridContext.tsx"],"names":[],"mappings":";;;AAAA,iCAAwD;AAO3C,QAAA,WAAW,GAAG,IAAA,qBAAa,EAAmB;IACzD,QAAQ,EAAE,KAAK;CAChB,CAAC,CAAA;AAEK,MAAM,cAAc,GAAG,GAAqB,EAAE,CAAC,IAAA,kBAAU,EAAC,mBAAW,CAAC,CAAA;AAAhE,QAAA,cAAc,kBAAkD"}

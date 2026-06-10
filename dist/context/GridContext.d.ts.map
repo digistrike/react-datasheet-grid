@@ -1,0 +1,1 @@
+{"version":3,"file":"GridContext.d.ts","sourceRoot":"","sources":["../../src/context/GridContext.tsx"],"names":[],"mappings":"AAAA,OAAO,KAAoC,MAAM,OAAO,CAAA;AAExD,MAAM,MAAM,gBAAgB,GAAG;IAC7B,QAAQ,EAAE,OAAO,CAAA;IACjB,eAAe,CAAC,EAAE,CAAC,QAAQ,EAAE,MAAM,EAAE,MAAM,EAAE,MAAM,KAAK,IAAI,CAAA;CAC7D,CAAA;AAED,eAAO,MAAM,WAAW,iCAEtB,CAAA;AAEF,eAAO,MAAM,cAAc,QAAO,gBAA2C,CAAA"}

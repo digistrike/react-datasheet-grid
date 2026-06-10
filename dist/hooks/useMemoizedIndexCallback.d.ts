@@ -1,0 +1,2 @@
+export declare const useMemoizedIndexCallback: <T extends any[]>(callbackFn: (index: number, ...args: T) => void, argsLength: number) => (index: number) => (...args: T) => void;
+//# sourceMappingURL=useMemoizedIndexCallback.d.ts.map
