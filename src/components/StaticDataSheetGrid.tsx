@@ -23,6 +23,11 @@ export const StaticDataSheetGrid = React.forwardRef<
       onSelectionChange,
       rowClassName,
       rowHeight,
+      wordWrap,
+      resizableColumns,
+      resizableRows,
+      onColumnResize,
+      onRowResize,
       ...rest
     }: DataSheetGridProps<T>,
     ref: React.ForwardedRef<DataSheetGridRef>
@@ -42,6 +47,11 @@ export const StaticDataSheetGrid = React.forwardRef<
       onSelectionChange,
       rowClassName,
       rowHeight,
+      wordWrap,
+      resizableColumns,
+      resizableRows,
+      onColumnResize,
+      onRowResize,
     })
 
     return (
@@ -51,6 +61,11 @@ export const StaticDataSheetGrid = React.forwardRef<
         rowHeight={
           typeof rowHeight === 'number' ? rowHeight : staticProps.rowHeight
         }
+        wordWrap={wordWrap ?? staticProps.wordWrap}
+        resizableColumns={resizableColumns ?? staticProps.resizableColumns}
+        resizableRows={resizableRows ?? staticProps.resizableRows}
+        onColumnResize={onColumnResize ?? staticProps.onColumnResize}
+        onRowResize={onRowResize ?? staticProps.onRowResize}
         ref={ref}
       />
     )

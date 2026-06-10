@@ -72,3 +72,31 @@ describe('getRowIndex', () => {
     expect(getRowIndex(5)).toBe(2)
   })
 })
+
+describe('getRowSize', () => {
+  test('Works with an empty cache', () => {
+    const { getRowSize } = fromSizes([2, 3, 4], 0)
+
+    expect(getRowSize(0)).toEqual({ height: 2, top: 0 })
+    expect(getRowSize(1)).toEqual({ height: 3, top: 2 })
+    expect(getRowSize(2)).toEqual({ height: 4, top: 5 })
+  })
+
+  test('Invalidates stale cache when height changes', () => {
+    const heights = [2, 3, 4]
+    useRefMock.mockReturnValue({
+      current: createSizes(2, 3, 4),
+    })
+
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const { getRowSize } = useRowHeights({
+      value: new Array(3).fill(0),
+      rowHeight: ({ rowIndex }) => heights[rowIndex],
+    })
+
+    heights[1] = 6
+
+    expect(getRowSize(1)).toEqual({ height: 6, top: 2 })
+    expect(getRowSize(2)).toEqual({ height: 4, top: 8 })
+  })
+})

@@ -15,7 +15,8 @@ import {
   Operation,
   Selection,
 } from '../types'
-import { useColumnWidths } from '../hooks/useColumnWidths'
+import { useResizableColumnWidths } from '../hooks/useResizableColumnWidths'
+import { GridContext } from '../context/GridContext'
 import { useResizeDetector } from 'react-resize-detector'
 import { useColumns } from '../hooks/useColumns'
 import { useEdges } from '../hooks/useEdges'
@@ -72,14 +73,16 @@ export const DataSheetGrid = React.memo(
         gutterColumn,
         stickyRightColumn,
         rowKey,
-        addRowsComponent: AddRowsComponent = AddRows,
+        addRowsComponent: AddRowsComponent = (props) => <AddRows {...props} />,
+   
         createRow = DEFAULT_CREATE_ROW as () => T,
         autoAddRow = false,
         lockRows = false,
         disableExpandSelection = false,
         disableSmartDelete = false,
         duplicateRow = DEFAULT_DUPLICATE_ROW,
-        contextMenuComponent: ContextMenuComponent = ContextMenu,
+        contextMenuComponent: ContextMenuComponent = (props) => <ContextMenu {...props} />,
+   
         disableContextMenu: disableContextMenuRaw = false,
         onFocus = DEFAULT_EMPTY_CALLBACK,
         onBlur = DEFAULT_EMPTY_CALLBACK,
@@ -88,6 +91,11 @@ export const DataSheetGrid = React.memo(
         rowClassName,
         cellClassName,
         onScroll,
+        wordWrap = false,
+        resizableColumns = false,
+        resizableRows = false,
+        onColumnResize,
+        onRowResize,
       }: DataSheetGridProps<T>,
       ref: React.ForwardedRef<DataSheetGridRef>
     ): JSX.Element => {
@@ -103,16 +111,97 @@ export const DataSheetGrid = React.memo(
       // Default value is 1 for the border
       const [heightDiff, setHeightDiff] = useDebounceState(1, 100)
 
-      const { getRowSize, totalSize, getRowIndex } = useRowHeights({
+      const baseRowHeight =
+        typeof rowHeight === 'number' ? rowHeight : headerRowHeight
+
+      const [measuredRowHeights, setMeasuredRowHeights] = useState<
+        Record<number, number>
+      >({})
+      const [rowHeightOverrides, setRowHeightOverrides] = useState<
+        Record<number, number>
+      >({})
+
+      const dynamicRowHeight = useCallback(
+        ({ rowIndex }: { rowIndex: number }) =>
+          rowHeightOverrides[rowIndex] ??
+          measuredRowHeights[rowIndex] ??
+          baseRowHeight,
+        [baseRowHeight, measuredRowHeights, rowHeightOverrides]
+      )
+
+      const { getRowSize, totalSize, getRowIndex, resetAfter } = useRowHeights({
         value: data,
-        rowHeight,
+        rowHeight:
+          wordWrap || resizableRows ? dynamicRowHeight : rowHeight,
       })
 
-      // Height of the list (including scrollbars and borders) to display
-      const displayHeight = Math.min(
-        maxHeight,
-        headerRowHeight + totalSize(maxHeight) + heightDiff
+      const dataLengthRef = useRef(data.length)
+
+      useEffect(() => {
+        if (wordWrap && dataLengthRef.current !== data.length) {
+          setMeasuredRowHeights({})
+          dataLengthRef.current = data.length
+        }
+      }, [data.length, wordWrap])
+
+      useEffect(() => {
+        if (resizableRows) {
+          resetAfter(0)
+        }
+      }, [resizableRows, rowHeightOverrides, resetAfter])
+
+      const HEIGHT_EPSILON = 2
+
+      const reportRowHeight = useCallback(
+        (rowIndex: number, height: number) => {
+          setMeasuredRowHeights((prev) => {
+            const currentHeight = prev[rowIndex] ?? baseRowHeight
+            const nextHeight = Math.max(
+              baseRowHeight,
+              currentHeight,
+              Math.ceil(height)
+            )
+
+            if (Math.abs(currentHeight - nextHeight) < HEIGHT_EPSILON) {
+              return prev
+            }
+
+            return { ...prev, [rowIndex]: nextHeight }
+          })
+        },
+        [baseRowHeight]
       )
+
+      const onRowHeightsChange = useCallback(
+        (heights: Record<number, number>) => {
+          setMeasuredRowHeights((prev) => {
+            let changed = false
+            const next = { ...prev }
+
+            for (const [index, height] of Object.entries(heights)) {
+              const rowIndex = Number(index)
+              const nextHeight = Math.max(baseRowHeight, Math.ceil(height))
+              const currentHeight = next[rowIndex] ?? baseRowHeight
+
+              if (Math.abs(currentHeight - nextHeight) >= HEIGHT_EPSILON) {
+                next[rowIndex] = nextHeight
+                changed = true
+              }
+            }
+
+            return changed ? next : prev
+          })
+        },
+        [baseRowHeight]
+      )
+
+      // Height of the list (including scrollbars and borders) to display
+      const displayHeight = wordWrap || resizableRows
+        ? maxHeight
+        : Math.min(
+            maxHeight,
+            headerRowHeight + totalSize(maxHeight) + heightDiff
+          )
 
       // Width and height of the scrollable area
       const { width, height } = useResizeDetector({
@@ -130,7 +219,104 @@ export const DataSheetGrid = React.memo(
         totalWidth: contentWidth,
         columnWidths,
         columnRights,
-      } = useColumnWidths(columns, width)
+        setColumnWidth,
+      } = useResizableColumnWidths(columns, width, resizableColumns)
+
+      const resizingColumnRef = useRef<{
+        index: number
+        startX: number
+        startWidth: number
+      } | null>(null)
+
+      const onColumnResizeMouseMove = useCallback(
+        (event: MouseEvent) => {
+          const resizing = resizingColumnRef.current
+
+          if (!resizing) {
+            return
+          }
+
+          const nextWidth =
+            resizing.startWidth + (event.clientX - resizing.startX)
+
+          setColumnWidth(resizing.index, nextWidth)
+        },
+        [setColumnWidth]
+      )
+
+      const onColumnResizeMouseUp = useCallback(() => {
+        const resizing = resizingColumnRef.current
+
+        if (resizing && columnWidths) {
+          onColumnResize?.({
+            columnIndex: resizing.index - 1,
+            width: columnWidths[resizing.index],
+            columnId: columns[resizing.index]?.id,
+          })
+        }
+
+        resizingColumnRef.current = null
+      }, [columnWidths, columns, onColumnResize])
+
+      useDocumentEventListener('mousemove', onColumnResizeMouseMove)
+      useDocumentEventListener('mouseup', onColumnResizeMouseUp)
+
+      const onColumnResizeStart = useCallback(
+        (columnIndex: number, startX: number, startWidth: number) => {
+          resizingColumnRef.current = { index: columnIndex, startX, startWidth }
+        },
+        []
+      )
+
+      const resizingRowRef = useRef<{
+        index: number
+        startY: number
+        startHeight: number
+      } | null>(null)
+      const lastResizedRowHeightRef = useRef(baseRowHeight)
+
+      const onRowResizeMouseMove = useCallback((event: MouseEvent) => {
+        const resizing = resizingRowRef.current
+
+        if (!resizing) {
+          return
+        }
+
+        const nextHeight = Math.max(
+          baseRowHeight,
+          resizing.startHeight + (event.clientY - resizing.startY)
+        )
+
+        lastResizedRowHeightRef.current = nextHeight
+
+        setRowHeightOverrides((prev) => ({
+          ...prev,
+          [resizing.index]: nextHeight,
+        }))
+      }, [baseRowHeight])
+
+      const onRowResizeMouseUp = useCallback(() => {
+        const resizing = resizingRowRef.current
+
+        if (resizing) {
+          onRowResize?.({
+            rowIndex: resizing.index,
+            height: lastResizedRowHeightRef.current,
+          })
+        }
+
+        resizingRowRef.current = null
+      }, [onRowResize])
+
+      useDocumentEventListener('mousemove', onRowResizeMouseMove)
+      useDocumentEventListener('mouseup', onRowResizeMouseUp)
+
+      const onRowResizeStart = useCallback(
+        (rowIndex: number, startY: number, startHeight: number) => {
+          resizingRowRef.current = { index: rowIndex, startY, startHeight }
+        },
+        []
+      )
 
       // x,y coordinates of the right click
       const [contextMenu, setContextMenu] = useState<{
@@ -1768,40 +1954,48 @@ export const DataSheetGrid = React.memo(
       ])
 
       return (
-        <div className={className} style={style}>
-          <div
-            ref={beforeTabIndexRef}
-            tabIndex={rawColumns.length && data.length ? 0 : undefined}
-            onFocus={(e) => {
-              e.target.blur()
-              setActiveCell({ col: 0, row: 0 })
-            }}
-          />
-          <Grid
-            columns={columns}
-            outerRef={outerRef}
-            columnWidths={columnWidths}
-            hasStickyRightColumn={hasStickyRightColumn}
-            displayHeight={displayHeight}
-            data={data}
-            fullWidth={fullWidth}
-            headerRowHeight={headerRowHeight}
-            activeCell={activeCell}
-            innerRef={innerRef}
-            rowHeight={getRowSize}
-            rowKey={rowKey}
-            selection={selection}
-            rowClassName={rowClassName}
-            editing={editing}
-            getContextMenuItems={getContextMenuItems}
-            setRowData={setRowData}
-            deleteRows={deleteRows}
-            insertRowAfter={insertRowAfter}
-            duplicateRows={duplicateRows}
-            stopEditing={stopEditing}
-            cellClassName={cellClassName}
-            onScroll={onScroll}
-          >
+        <GridContext.Provider value={{ wordWrap, reportRowHeight }}>
+          <div className={className} style={style}>
+            <div
+              ref={beforeTabIndexRef}
+              tabIndex={rawColumns.length && data.length ? 0 : undefined}
+              onFocus={(e) => {
+                e.target.blur()
+                setActiveCell({ col: 0, row: 0 })
+              }}
+            />
+            <Grid
+              columns={columns}
+              outerRef={outerRef}
+              columnWidths={columnWidths}
+              hasStickyRightColumn={hasStickyRightColumn}
+              displayHeight={displayHeight}
+              data={data}
+              fullWidth={fullWidth}
+              headerRowHeight={headerRowHeight}
+              activeCell={activeCell}
+              innerRef={innerRef}
+              rowHeight={getRowSize}
+              baseRowHeight={baseRowHeight}
+              rowKey={rowKey}
+              selection={selection}
+              rowClassName={rowClassName}
+              editing={editing}
+              getContextMenuItems={getContextMenuItems}
+              setRowData={setRowData}
+              deleteRows={deleteRows}
+              insertRowAfter={insertRowAfter}
+              duplicateRows={duplicateRows}
+              stopEditing={stopEditing}
+              cellClassName={cellClassName}
+              onScroll={onScroll}
+              wordWrap={wordWrap}
+              resizableColumns={resizableColumns}
+              resizableRows={resizableRows}
+              onColumnResizeStart={onColumnResizeStart}
+              onRowResizeStart={onRowResizeStart}
+              onRowHeightsChange={wordWrap ? onRowHeightsChange : undefined}
+            >
             <SelectionRect
               columnRights={columnRights}
               columnWidths={columnWidths}
@@ -1845,7 +2039,8 @@ export const DataSheetGrid = React.memo(
               close={() => setContextMenu(null)}
             />
           )}
-        </div>
+          </div>
+        </GridContext.Provider>
       )
     }
   )

@@ -139,6 +139,18 @@ export type DataSheetGridProps<T> = {
   height?: number
   rowHeight?: number | ((opt: { rowData: T; rowIndex: number }) => number)
   headerRowHeight?: number
+  /** When true, cell text wraps and row height grows to fit content (Excel-like) */
+  wordWrap?: boolean
+  /** When true, column widths can be adjusted by dragging header borders */
+  resizableColumns?: boolean
+  /** When true, row heights can be adjusted by dragging row gutter borders */
+  resizableRows?: boolean
+  onColumnResize?: (opts: {
+    columnIndex: number
+    width: number
+    columnId?: string
+  }) => void
+  onRowResize?: (opts: { rowIndex: number; height: number }) => void
   addRowsComponent?:
     | ((props: AddRowsComponentProps) => React.ReactElement | null)
     | false

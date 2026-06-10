@@ -1,5 +1,12 @@
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual'
-import React, { ReactNode, RefObject, useEffect } from 'react'
+import React, {
+  ReactNode,
+  RefObject,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+} from 'react'
 import {
   Cell,
   Column,
@@ -10,6 +17,7 @@ import {
 import cx from 'classnames'
 import { Cell as CellComponent } from './Cell'
 import { useMemoizedIndexCallback } from '../hooks/useMemoizedIndexCallback'
+import { measureRowContentHeight } from '../utils/measureRowContentHeight'
 
 export const Grid = <T extends any>({
   data,
@@ -21,6 +29,7 @@ export const Grid = <T extends any>({
   displayHeight,
   headerRowHeight,
   rowHeight,
+  baseRowHeight,
   rowKey,
   fullWidth,
   selection,
@@ -36,6 +45,12 @@ export const Grid = <T extends any>({
   insertRowAfter,
   stopEditing,
   onScroll,
+  wordWrap = false,
+  resizableColumns = false,
+  resizableRows = false,
+  onColumnResizeStart,
+  onRowResizeStart,
+  onRowHeightsChange,
 }: {
   data: T[]
   columns: Column<T, any, any>[]
@@ -46,6 +61,7 @@ export const Grid = <T extends any>({
   displayHeight: number
   headerRowHeight: number
   rowHeight: (index: number) => { height: number }
+  baseRowHeight: number
   rowKey: DataSheetGridProps<T>['rowKey']
   rowClassName: DataSheetGridProps<T>['rowClassName']
   cellClassName: DataSheetGridProps<T>['cellClassName']
@@ -61,6 +77,20 @@ export const Grid = <T extends any>({
   insertRowAfter: (row: number, count?: number) => void
   stopEditing: (opts?: { nextRow?: boolean }) => void
   onScroll?: React.UIEventHandler<HTMLDivElement>
+  wordWrap?: boolean
+  resizableColumns?: boolean
+  resizableRows?: boolean
+  onColumnResizeStart?: (
+    columnIndex: number,
+    startX: number,
+    startWidth: number
+  ) => void
+  onRowResizeStart?: (
+    rowIndex: number,
+    startY: number,
+    startHeight: number
+  ) => void
+  onRowHeightsChange?: (heights: Record<number, number>) => void
 }) => {
   const rowVirtualizer = useVirtualizer({
     count: data.length,
@@ -114,6 +144,67 @@ export const Grid = <T extends any>({
     colVirtualizer.measure()
   }, [colVirtualizer, columnWidths])
 
+  useEffect(() => {
+    rowVirtualizer.measure()
+  }, [rowVirtualizer, wordWrap, columnWidths, data.length, rowHeight])
+
+  const onRowHeightsChangeRef = useRef(onRowHeightsChange)
+  onRowHeightsChangeRef.current = onRowHeightsChange
+
+  const columnWidthsKey = columnWidths?.join(',') ?? ''
+  const prevEditingRef = useRef(editing)
+  const editingRef = useRef(editing)
+  const activeCellRef = useRef(activeCell)
+  editingRef.current = editing
+  activeCellRef.current = activeCell
+
+  const measureVisibleRows = useCallback(() => {
+    if (!wordWrap || !onRowHeightsChangeRef.current || !innerRef.current) {
+      return
+    }
+
+    const heights: Record<number, number> = {}
+    const editingRow = editingRef.current
+      ? activeCellRef.current?.row
+      : undefined
+
+    innerRef.current.querySelectorAll<HTMLElement>('.dsg-row-wrap').forEach(
+      (rowElement) => {
+        const index = Number(rowElement.dataset.index)
+
+        if (Number.isNaN(index)) {
+          return
+        }
+
+        if (editingRow === index) {
+          return
+        }
+
+        heights[index] = measureRowContentHeight(rowElement, baseRowHeight)
+      }
+    )
+
+    if (Object.keys(heights).length > 0) {
+      onRowHeightsChangeRef.current(heights)
+    }
+  }, [wordWrap, baseRowHeight, innerRef])
+
+  useLayoutEffect(() => {
+    if (editing) {
+      return
+    }
+
+    measureVisibleRows()
+  }, [wordWrap, columnWidthsKey, data, baseRowHeight, editing, measureVisibleRows])
+
+  useLayoutEffect(() => {
+    if (prevEditingRef.current && !editing) {
+      measureVisibleRows()
+    }
+
+    prevEditingRef.current = editing
+  }, [editing, measureVisibleRows])
+
   const setGivenRowData = useMemoizedIndexCallback(setRowData, 1)
   const deleteGivenRow = useMemoizedIndexCallback(deleteRows, 0)
   const duplicateGivenRow = useMemoizedIndexCallback(duplicateRows, 0)
@@ -123,6 +214,10 @@ export const Grid = <T extends any>({
   const selectionColMax = selection?.max.col ?? activeCell?.col
   const selectionMinRow = selection?.min.row ?? activeCell?.row
   const selectionMaxRow = selection?.max.row ?? activeCell?.row
+
+  const lastStickyColumnIndex = hasStickyRightColumn
+    ? columns.length - 1
+    : columns.length
 
   return (
     <div
@@ -170,6 +265,35 @@ export const Grid = <T extends any>({
                 </div>
               </CellComponent>
             ))}
+            {resizableColumns && (
+              <div className="dsg-column-resize-layer">
+                {colVirtualizer.getVirtualItems().map((col) => {
+                  if (
+                    col.index === 0 ||
+                    col.index >= lastStickyColumnIndex
+                  ) {
+                    return null
+                  }
+
+                  return (
+                    <div
+                      key={`resize-${col.key}`}
+                      className="dsg-column-resize-handle"
+                      style={{ left: col.start + col.size - 3 }}
+                      onMouseDown={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        onColumnResizeStart?.(
+                          col.index,
+                          event.clientX,
+                          col.size
+                        )
+                      }}
+                    />
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
         {rowVirtualizer.getVirtualItems().map((row) => {
@@ -180,8 +304,10 @@ export const Grid = <T extends any>({
           return (
             <div
               key={row.key}
+              data-index={row.index}
               className={cx(
                 'dsg-row',
+                wordWrap && 'dsg-row-wrap',
                 typeof rowClassName === 'string' ? rowClassName : null,
                 typeof rowClassName === 'function'
                   ? rowClassName({
@@ -220,6 +346,7 @@ export const Grid = <T extends any>({
                     }
                     active={col.index === 0 && rowActive}
                     disabled={cellDisabled}
+                    wordWrap={wordWrap}
                     className={cx(
                       typeof colCellClassName === 'function'
                         ? colCellClassName({

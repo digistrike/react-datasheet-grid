@@ -2,10 +2,12 @@ import React, { useEffect, useLayoutEffect, useRef } from 'react'
 import { CellComponent, CellProps, Column } from '../types'
 import cx from 'classnames'
 import { useFirstRender } from '../hooks/useFirstRender'
+import { useGridContext } from '../context/GridContext'
 
 type TextColumnOptions<T> = {
   placeholder?: string
   alignRight?: boolean
+  wordWrap?: boolean
   // When true, data is updated as the user types, otherwise it is only updated on blur. Default to true
   continuousUpdates?: boolean
   // Value to use when deleting the cell
@@ -25,6 +27,7 @@ type TextColumnOptions<T> = {
 type TextColumnData<T> = {
   placeholder?: string
   alignRight: boolean
+  wordWrap: boolean
   continuousUpdates: boolean
   parseUserInput: (value: string) => T
   formatBlurredInput: (value: T) => string
@@ -38,20 +41,25 @@ const TextComponent = React.memo<
     active,
     focus,
     rowData,
+    rowIndex,
     setRowData,
     columnData: {
       placeholder,
       alignRight,
+      wordWrap: columnWordWrap,
       formatInputOnFocus,
       formatBlurredInput,
       parseUserInput,
       continuousUpdates,
     },
   }) => {
-    const ref = useRef<HTMLInputElement>(null)
+    const { wordWrap: gridWordWrap, reportRowHeight } = useGridContext()
+    const wordWrap = columnWordWrap || gridWordWrap
+    const inputRef = useRef<HTMLInputElement>(null)
+    const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const ref = wordWrap ? textareaRef : inputRef
     const firstRender = useFirstRender()
 
-    // We create refs for async access so we don't have to add it to the useEffect dependencies
     const asyncRef = useRef({
       rowData,
       formatInputOnFocus,
@@ -60,12 +68,8 @@ const TextComponent = React.memo<
       parseUserInput,
       continuousUpdates,
       firstRender,
-      // Timestamp of last focus (when focus becomes true) and last change (input change)
-      // used to prevent un-necessary updates when value was not changed
       focusedAt: 0,
       changedAt: 0,
-      // This allows us to keep track of whether or not the user blurred the input using the Esc key
-      // If the Esc key is used we do not update the row's value (only relevant when continuousUpdates is false)
       escPressed: false,
     })
     asyncRef.current = {
@@ -76,86 +80,143 @@ const TextComponent = React.memo<
       parseUserInput,
       continuousUpdates,
       firstRender,
-      // Keep the same values across renders
       focusedAt: asyncRef.current.focusedAt,
       changedAt: asyncRef.current.changedAt,
       escPressed: asyncRef.current.escPressed,
     }
 
+    const lastReportedHeightRef = useRef(0)
+
+    const reportTextareaHeight = (force = false) => {
+      const textarea = textareaRef.current
+
+      if (!wordWrap || !textarea) {
+        return
+      }
+
+      const previousHeight = textarea.style.height
+      textarea.style.height = '0px'
+      const nextHeight = textarea.scrollHeight
+      textarea.style.height = previousHeight
+
+      if (
+        !force &&
+        Math.abs(nextHeight - lastReportedHeightRef.current) < 8
+      ) {
+        return
+      }
+
+      lastReportedHeightRef.current = nextHeight
+      textarea.style.height = `${nextHeight}px`
+      reportRowHeight?.(rowIndex, nextHeight)
+    }
+
     useLayoutEffect(() => {
-      // When the cell gains focus we make sure to immediately select the text in the input:
-      // - If the user gains focus by typing, it will replace the existing text, as expected
-      // - If the user gains focus by clicking or pressing Enter, the text will be preserved and selected
       if (focus) {
         if (ref.current) {
-          // Make sure to first format the input
           ref.current.value = asyncRef.current.formatInputOnFocus(
             asyncRef.current.rowData
           )
           ref.current.focus()
-          ref.current.select()
+
+          if (!wordWrap) {
+            ;(ref.current as HTMLInputElement).select()
+          } else {
+            const textarea = ref.current as HTMLTextAreaElement
+            textarea.selectionStart = textarea.value.length
+            textarea.selectionEnd = textarea.value.length
+            lastReportedHeightRef.current = 0
+            reportTextareaHeight(true)
+          }
         }
 
-        // We immediately reset the escPressed
         asyncRef.current.escPressed = false
-        // Save current timestamp
         asyncRef.current.focusedAt = Date.now()
-      }
-      // When the cell looses focus (by pressing Esc, Enter, clicking away...) we make sure to blur the input
-      // Otherwise the user would still see the cursor blinking
-      else {
-        if (ref.current) {
-          // Update the row's value on blur only if the user did not press escape (only relevant when continuousUpdates is false)
-          if (
-            !asyncRef.current.escPressed &&
-            !asyncRef.current.continuousUpdates &&
-            !asyncRef.current.firstRender &&
-            // Make sure that focus was gained more than 10 ms ago, used to prevent flickering
-            asyncRef.current.changedAt >= asyncRef.current.focusedAt
-          ) {
-            asyncRef.current.setRowData(
-              asyncRef.current.parseUserInput(ref.current.value)
-            )
-          }
-          ref.current.blur()
+      } else if (ref.current) {
+        if (
+          !asyncRef.current.escPressed &&
+          !asyncRef.current.continuousUpdates &&
+          !asyncRef.current.firstRender &&
+          asyncRef.current.changedAt >= asyncRef.current.focusedAt
+        ) {
+          asyncRef.current.setRowData(
+            asyncRef.current.parseUserInput(ref.current.value)
+          )
         }
+        ref.current.blur()
       }
-    }, [focus])
+    }, [focus, wordWrap])
 
     useEffect(() => {
-      if (!focus && ref.current) {
-        // On blur or when the data changes, format it for display
+      if (!focus && ref.current && !wordWrap) {
         ref.current.value = asyncRef.current.formatBlurredInput(rowData)
       }
-    }, [focus, rowData])
+    }, [focus, rowData, wordWrap])
+
+    const displayValue = formatBlurredInput(rowData)
+
+    if (wordWrap && !focus) {
+      return (
+        <div
+          className={cx(
+            'dsg-input',
+            'dsg-text-wrap-display',
+            alignRight && 'dsg-input-align-right'
+          )}
+        >
+          {displayValue}
+        </div>
+      )
+    }
+
+    const sharedProps = {
+      placeholder: active ? placeholder : undefined,
+      tabIndex: -1 as const,
+      style: { pointerEvents: focus ? ('auto' as const) : ('none' as const) },
+      onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        asyncRef.current.changedAt = Date.now()
+
+        if (continuousUpdates) {
+          setRowData(parseUserInput(e.target.value))
+        }
+
+        if (wordWrap) {
+          reportTextareaHeight()
+        }
+      },
+      onKeyDown: (e: React.KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          asyncRef.current.escPressed = true
+        }
+
+        if (wordWrap && e.key === 'Enter' && !e.altKey && !e.shiftKey) {
+          e.preventDefault()
+        }
+      },
+    }
+
+    if (wordWrap) {
+      return (
+        <textarea
+          {...sharedProps}
+          ref={textareaRef}
+          defaultValue={displayValue}
+          className={cx(
+            'dsg-input',
+            'dsg-textarea',
+            alignRight && 'dsg-input-align-right'
+          )}
+          rows={1}
+        />
+      )
+    }
 
     return (
       <input
-        // We use an uncontrolled component for better performance
-        defaultValue={formatBlurredInput(rowData)}
+        {...sharedProps}
+        ref={inputRef}
+        defaultValue={displayValue}
         className={cx('dsg-input', alignRight && 'dsg-input-align-right')}
-        placeholder={active ? placeholder : undefined}
-        // Important to prevent any undesired "tabbing"
-        tabIndex={-1}
-        ref={ref}
-        // Make sure that while the cell is not focus, the user cannot interact with the input
-        // The cursor will not change to "I", the style of the input will not change,
-        // and the user cannot click and edit the input (this part is handled by DataSheetGrid itself)
-        style={{ pointerEvents: focus ? 'auto' : 'none' }}
-        onChange={(e) => {
-          asyncRef.current.changedAt = Date.now()
-
-          // Only update the row's value as the user types if continuousUpdates is true
-          if (continuousUpdates) {
-            setRowData(parseUserInput(e.target.value))
-          }
-        }}
-        onKeyDown={(e) => {
-          // Track when user presses the Esc key
-          if (e.key === 'Escape') {
-            asyncRef.current.escPressed = true
-          }
-        }}
       />
     )
   }
@@ -168,20 +229,24 @@ export const textColumn = createTextColumn<string | null>()
 export function createTextColumn<T = string | null>({
   placeholder,
   alignRight = false,
+  wordWrap = false,
   continuousUpdates = true,
   deletedValue = null as unknown as T,
   parseUserInput = (value) => (value.trim() || null) as unknown as T,
-  formatBlurredInput = (value) => String(value ?? ''),
+  formatBlurredInput = wordWrap
+    ? (value) => String(value ?? '')
+    : (value) => String(value ?? '').replace(/\n/g, ' '),
   formatInputOnFocus = (value) => String(value ?? ''),
   formatForCopy = (value) => String(value ?? ''),
   parsePastedValue = (value) =>
-    (value.replace(/[\n\r]+/g, ' ').trim() || (null as unknown)) as T,
+    (value.replace(/\r/g, '').trim() || (null as unknown)) as T,
 }: TextColumnOptions<T> = {}): Partial<Column<T, TextColumnData<T>, string>> {
   return {
     component: TextComponent as unknown as CellComponent<T, TextColumnData<T>>,
     columnData: {
       placeholder,
       alignRight,
+      wordWrap,
       continuousUpdates,
       formatInputOnFocus,
       formatBlurredInput,

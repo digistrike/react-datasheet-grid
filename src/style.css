@@ -53,6 +53,8 @@
   position: sticky;
   top: 0;
   z-index: 40;
+  overflow: hidden;
+  isolation: isolate;
 }
 
 .dsg-cell {
@@ -67,6 +69,16 @@
   position: absolute;
   top: 0;
   height: 100%;
+}
+
+.dsg-cell-wrap {
+  align-items: flex-start;
+  overflow: visible;
+}
+
+.dsg-row-wrap {
+  box-sizing: border-box;
+  overflow: visible;
 }
 
 .dsg-hidden-cell {
@@ -93,8 +105,13 @@
 }
 
 .dsg-cell-header-container {
+  position: relative;
+  z-index: 1;
   padding: 0 10px;
   line-height: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dsg-cell-header.dsg-cell-gutter {
@@ -522,6 +539,73 @@
 
 .dsg-input-align-right {
   text-align: right;
+}
+
+.dsg-text-wrap-display {
+  width: 100%;
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  pointer-events: none;
+}
+
+.dsg-textarea {
+  resize: none;
+  overflow: hidden;
+  height: auto;
+  min-height: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.dsg-column-resize-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.dsg-column-resize-handle {
+  position: absolute;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  pointer-events: auto;
+}
+
+.dsg-column-resize-handle:hover {
+  background: var(--dsg-selection-border-color);
+  opacity: 0.35;
+}
+
+.dsg-row-resize-handle {
+  position: absolute;
+  left: 0;
+  bottom: -3px;
+  width: 100%;
+  height: 6px;
+  cursor: row-resize;
+  z-index: 20;
+  pointer-events: auto;
+}
+
+.dsg-row-resize-handle:hover {
+  background: var(--dsg-selection-border-color);
+  opacity: 0.35;
 }
 
 .dsg-hide-date-picker[type="date"]::-webkit-inner-spin-button,

@@ -62,49 +62,73 @@ export const useRowHeights = <T extends any>({
       return r
     }
 
+    const getRowSize = (index: number): RowSize => {
+      if (typeof rowHeight === 'number') {
+        return { height: rowHeight, top: rowHeight * index }
+      }
+
+      if (index >= value.length) {
+        return { height: 0, top: 0 }
+      }
+
+      if (index < calculatedHeights.current.length) {
+        const cached = calculatedHeights.current[index]
+        const expectedHeight = rowHeight({
+          rowIndex: index,
+          rowData: value[index],
+        })
+
+        if (cached.height === expectedHeight) {
+          return cached
+        }
+
+        calculatedHeights.current = calculatedHeights.current.slice(0, index)
+      }
+
+      let lastBottom = 0
+
+      if (calculatedHeights.current.length > 0) {
+        const lastRow =
+          calculatedHeights.current[calculatedHeights.current.length - 1]
+        lastBottom = lastRow.top + lastRow.height
+      }
+
+      for (let i = calculatedHeights.current.length; i <= index; i++) {
+        const height = rowHeight({ rowIndex: i, rowData: value[i] })
+
+        calculatedHeights.current.push({ height, top: lastBottom })
+        lastBottom += height
+      }
+
+      return calculatedHeights.current[index]
+    }
+
     return {
       resetAfter: (index: number) => {
         calculatedHeights.current = calculatedHeights.current.slice(0, index)
         rerender((x) => x + 1)
       },
-      getRowSize: (index: number): RowSize => {
-        if (typeof rowHeight === 'number') {
-          return { height: rowHeight, top: rowHeight * index }
-        }
-
-        if (index >= value.length) {
-          return { height: 0, top: 0 }
-        }
-
-        if (index < calculatedHeights.current.length) {
-          return calculatedHeights.current[index]
-        }
-
-        let lastBottom =
-          calculatedHeights.current[calculatedHeights.current.length - 1].top +
-          calculatedHeights.current[calculatedHeights.current.length - 1].height
-
-        for (let i = calculatedHeights.current.length; i <= index; i++) {
-          const height = rowHeight({ rowIndex: i, rowData: value[i] })
-
-          calculatedHeights.current.push({ height, top: lastBottom })
-          lastBottom += height
-        }
-
-        return calculatedHeights.current[index]
-      },
+      getRowSize,
       getRowIndex,
       totalSize: (maxHeight: number) => {
         if (typeof rowHeight === 'number') {
           return value.length * rowHeight
         }
 
-        const index = getRowIndex(maxHeight)
+        if (value.length === 0) {
+          return 0
+        }
 
-        return (
-          calculatedHeights.current[index].top +
-          calculatedHeights.current[index].height
-        )
+        const index = getRowIndex(maxHeight)
+        const row = calculatedHeights.current[index]
+
+        if (row) {
+          return row.top + row.height
+        }
+
+        const lastRow = getRowSize(value.length - 1)
+
+        return lastRow.top + lastRow.height
       },
     }
   }, [rowHeight, value])

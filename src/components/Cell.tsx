@@ -7,6 +7,7 @@ export const Cell: FC<{
   disabled?: boolean
   className?: string
   active?: boolean
+  wordWrap?: boolean
   children?: any
   width: number
   left: number
@@ -17,6 +18,7 @@ export const Cell: FC<{
   active,
   disabled,
   className,
+  wordWrap,
   width,
   left,
 }) => {
@@ -28,6 +30,7 @@ export const Cell: FC<{
         disabled && 'dsg-cell-disabled',
         gutter && active && 'dsg-cell-gutter-active',
         stickyRight && 'dsg-cell-sticky-right',
+        wordWrap && 'dsg-cell-wrap',
         className
       )}
       style={{
